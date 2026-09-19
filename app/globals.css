@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------
+   Tokens — Light (padrão)
+--------------------------------------------------------------------- */
+:root {
+  --background: 40 20% 98%;          /* porcelana, não creme */
+  --foreground: 222 20% 9%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 20% 9%;
+
+  --border: 220 14% 90%;
+  --muted: 220 14% 95%;
+  --muted-foreground: 220 9% 40%;
+
+  --primary: 222 20% 9%;
+  --primary-foreground: 40 20% 98%;
+
+  --signal: 38 62% 52%;              /* dourado abafado */
+  --signal-foreground: 40 20% 98%;
+
+  --live: 172 66% 34%;               /* teal */
+
+  --destructive: 358 75% 59%;
+  --ring: 38 62% 52%;
+
+  --radius: 0.75rem;
+}
+
+/* ---------------------------------------------------------------------
+   Tokens — Dark
+--------------------------------------------------------------------- */
+.dark {
+  --background: 222 26% 7%;          /* grafite-azulado, não preto puro */
+  --foreground: 220 14% 93%;
+
+  --card: 222 23% 10%;
+  --card-foreground: 220 14% 93%;
+
+  --border: 222 16% 18%;
+  --muted: 222 16% 14%;
+  --muted-foreground: 220 9% 62%;
+
+  --primary: 220 14% 93%;
+  --primary-foreground: 222 26% 7%;
+
+  --signal: 38 68% 58%;
+  --signal-foreground: 222 26% 7%;
+
+  --live: 168 60% 45%;
+
+  --destructive: 358 70% 60%;
+  --ring: 38 68% 58%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Acessibilidade: respeita preferência de movimento reduzido */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Foco visível — nunca remover outline sem substituir */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Scrollbar discreta, consistente com a estética "app nativo" */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 999px;
+}

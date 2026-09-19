@@ -1,86 +1,335 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useState, useEffect, Suspense } from "react";
+import { Wallet, Coins, Award, Palette, ShoppingBag, Check, Flame, ShieldCheck, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { Card } from "@/components/ui/primitives";
-import { formatDistanceToNowStrict } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+function CarteiraContent() {
+  const [coins, setCoins] = useState(10); // Começa com menos moedas para valorizar
+  const [dailyClaimed, setDailyClaimed] = useState(false);
+  
+  // Sistema de Ofensiva (Dias seguidos)
+  const [streak, setStreak] = useState(1); 
+  
+  const [purchasedColors, setPurchasedColors] = useState<string[]>(["text-foreground"]);
+  const [activeColor, setActiveColor] = useState("text-foreground");
+  const [loadingPackageId, setLoadingPackageId] = useState<string | null>(null);
 
-const TX_LABELS: Record<string, string> = {
-  credit_purchase: "Compra de coins",
-  tip_sent: "Coins enviados",
-  tip_received: "Coins recebidos",
-  creator_payout: "Repasse de criador",
-  refund: "Reembolso",
-  subscription_reward: "Recompensa de assinatura",
-};
+  useEffect(() => {
+    const savedCoins = localStorage.getItem("nexus_coins");
+    const savedDaily = localStorage.getItem("nexus_daily_claimed");
+    const savedStreak = localStorage.getItem("nexus_streak");
+    const savedPurchased = localStorage.getItem("nexus_purchased_colors");
+    const savedActiveColor = localStorage.getItem("nexus_name_color");
 
-export default async function CarteiraPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login?redirectTo=/carteira");
+    if (savedCoins) setCoins(Number(savedCoins));
+    if (savedDaily) setDailyClaimed(savedDaily === "true");
+    if (savedStreak) setStreak(Number(savedStreak));
+    if (savedPurchased) setPurchasedColors(JSON.parse(savedPurchased));
+    if (savedActiveColor) setActiveColor(savedActiveColor);
+  }, []);
 
-  const [{ data: wallet }, { data: transactions }] = await Promise.all([
-    supabase.from("wallets").select("balance").eq("user_id", user.id).single(),
-    supabase
-      .from("wallet_transactions")
-      .select("id, amount, type, created_at, counterparty:profiles!wallet_transactions_counterparty_id_fkey(display_name)")
-      .eq("wallet_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(30),
-  ]);
+  // VALORES RECALIBRADOS: Itens raros que exigem esforço real de dias jogando
+  const lojaCores = [
+    { id: "text-purple-500", name: "Roxo Neon (Comum)", preco: 150, classe: "text-purple-500" },
+    { id: "text-emerald-500", name: "Verde Cyberpunk (Raro)", preco: 350, classe: "text-emerald-500" },
+    { id: "text-rose-500", name: "Rosa Creator (Épico)", preco: 600, classe: "text-rose-500" },
+    { id: "text-amber-500", name: "Dourado Eterno (Lendário)", preco: 1200, classe: "text-amber-500" },
+  ];
+
+  const moedasPackages = [
+    {
+      id: "saco-coins",
+      name: "Saco de Coins",
+      coins: 200,
+      price: "R$ 4,90",
+      highlight: false,
+      accent: "from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-700",
+      badge: "Básico",
+    },
+    {
+      id: "cofre-minerador",
+      name: "Cofre do Minerador",
+      coins: 600,
+      price: "R$ 12,90",
+      highlight: true,
+      accent: "from-amber-200 via-yellow-300 to-amber-500",
+      badge: "Mais Vendido",
+    },
+    {
+      id: "fortuna-lendaria",
+      name: "Fortuna Lendária",
+      coins: 1500,
+      price: "R$ 29,90",
+      highlight: false,
+      accent: "from-violet-200 via-fuchsia-300 to-purple-500",
+      badge: "Elite",
+    },
+  ];
+
+  // Cálculo de ganho baseado no dia atual da ofensiva
+  const ganhoHoje = 10 + (streak * 5); // Dia 1 ganha 15, Dia 2 ganha 20, etc.
+  const proximoBonusEmDias = 7 - (streak % 7);
+
+  const handleClaimDaily = () => {
+    if (dailyClaimed) return;
+    
+    let bonusFinal = ganhoHoje;
+    let novaOfensiva = streak + 1;
+    let mensagemAlert = `Você coletou a recompensa do Dia ${streak}! +${ganhoHoje} NX\$ adicionados. ⚡`;
+
+    // Bônus do 7º Dia (O grande prêmio de retenção)
+    if (novaOfensiva % 7 === 0) {
+      bonusFinal += 100;
+      mensagemAlert = `🔥 INCRÍVEL! Você completou uma ofensiva de 7 dias! Você ganhou o bônus máximo de +100 NX\$ e coletou um total de ${ganhoHoje + 100} NX\$!`;
+    }
+
+    const novoSaldo = coins + bonusFinal;
+    
+    setCoins(novoSaldo);
+    setDailyClaimed(true);
+    setStreak(novaOfensiva);
+
+    localStorage.setItem("nexus_coins", novoSaldo.toString());
+    localStorage.setItem("nexus_daily_claimed", "true");
+    localStorage.setItem("nexus_streak", novaOfensiva.toString());
+    
+    alert(mensagemAlert);
+  };
+
+  const handleBuyColor = (colorId: string, preco: number) => {
+    if (purchasedColors.includes(colorId)) {
+      setActiveColor(colorId);
+      localStorage.setItem("nexus_name_color", colorId);
+      return;
+    }
+
+    if (coins < preco) {
+      alert(`Saldo insuficiente! Este item custa ${preco} NX\$. Continue sua ofensiva diária para acumular moedas.`);
+      return;
+    }
+
+    const novoSaldo = coins - preco;
+    const novasCores = [...purchasedColors, colorId];
+    
+    setCoins(novoSaldo);
+    setPurchasedColors(novasCores);
+    setActiveColor(colorId);
+
+    localStorage.setItem("nexus_coins", novoSaldo.toString());
+    localStorage.setItem("nexus_purchased_colors", JSON.stringify(novasCores));
+    localStorage.setItem("nexus_name_color", colorId);
+    alert("Upgrade de perfil comprado e equipado com sucesso! 💎");
+  };
+
+  const handleBuyCoinsPackage = async (packageId: string, amount: number) => {
+    setLoadingPackageId(packageId);
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const novoSaldo = coins + amount;
+    setCoins(novoSaldo);
+    localStorage.setItem("nexus_coins", novoSaldo.toString());
+    setLoadingPackageId(null);
+
+    const packageName = moedasPackages.find((pkg) => pkg.id === packageId)?.name ?? "Pacote";
+    alert(`${packageName} carregado com sucesso! +${amount} NX$ adicionados à sua carteira.`);
+  };
 
   return (
     <AppShell activePath="/carteira">
-      <h1 className="font-display italic text-xl font-medium mb-5">Carteira</h1>
-
-      <Card className="p-6 mb-6">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">Saldo disponível</div>
-        <div className="font-display text-4xl mt-2 flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-signal inline-block" />
-          {(wallet?.balance ?? 0).toLocaleString("pt-BR")}
-          <span className="text-base text-muted-foreground font-sans font-normal ml-1">coins</span>
+      <div className="w-full max-w-3xl mx-auto p-4 space-y-8 animate-in fade-in duration-300">
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Sua Carteira</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Participe diariamente da rede para minerar moedas e desbloquear cosméticos.</p>
         </div>
-      </Card>
 
-      <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
-        Extrato
-      </h2>
+        {/* INDICADOR DE OFENSIVA ESTILO DUOLINGO */}
+        <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-full text-amber-500 font-bold text-xs">
+          <Flame className="w-4 h-4 fill-amber-500" />
+          <span>{streak} Dias Seguidos</span>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        {/* CARD DO SALDO */}
+        <div className="md:col-span-2 relative overflow-hidden bg-zinc-950 text-white p-6 rounded-2xl border border-zinc-800 shadow-xl flex flex-col justify-between min-h-[140px]">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-zinc-400 tracking-wider uppercase">Saldo Verificado</p>
+            <Wallet className="w-4 h-4 text-zinc-500" />
+          </div>
+          <div className="flex items-baseline gap-2 mt-4">
+            <Coins className="w-6 h-6 text-amber-400 self-center" />
+            <span className="text-3xl font-black tracking-tight">{coins}</span>
+            <span className="text-xs font-bold text-zinc-500 tracking-wider">NX\$ COINS</span>
+          </div>
+        </div>
 
-      <Card className="divide-y divide-border">
-        {(!transactions || transactions.length === 0) && (
-          <p className="p-5 text-sm text-muted-foreground text-center">Nenhuma movimentação ainda.</p>
-        )}
-        {transactions?.map((tx: any) => {
-          const isCredit = tx.amount > 0;
-          return (
-            <div key={tx.id} className="flex items-center gap-3 p-4">
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-full flex-shrink-0 ${
-                  isCredit ? "bg-live/15 text-live" : "bg-destructive/10 text-destructive"
-                }`}
-              >
-                {isCredit ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium">{TX_LABELS[tx.type] ?? tx.type}</div>
-                <div className="text-xs text-muted-foreground">
-                  {tx.counterparty?.display_name && `com ${tx.counterparty.display_name} · `}
-                  {formatDistanceToNowStrict(new Date(tx.created_at), { locale: ptBR })} atrás
+        {/* CARD DO SISTEMA DE RETENÇÃO */}
+        <div className="bg-zinc-900/50 dark:bg-zinc-900/30 border border-border p-5 rounded-2xl flex flex-col justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+              <Award className="w-3.5 h-3.5 text-amber-500" /> MINERAÇÃO DIÁRIA
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Próximo resgate: <span className="font-bold text-foreground">+{ganhoHoje} NX\$</span>. 
+              {proximoBonusEmDias === 1 ? " Amanhã é o Grande Bônus de +100!" : ` Faltam ${proximoBonusEmDias} dias para o Super Baú.`}
+            </p>
+          </div>
+
+          <button
+            onClick={handleClaimDaily}
+            disabled={dailyClaimed}
+            className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all ${
+              dailyClaimed
+                ? "bg-zinc-100 dark:bg-zinc-800 text-muted-foreground border border-border cursor-not-allowed opacity-60"
+                : "bg-amber-400 text-zinc-950 hover:bg-amber-300 active:scale-[0.98] shadow-md shadow-amber-400/5"
+            }`}
+          >
+            {dailyClaimed ? "Coletado Hoje" : `Coletar Moedas`}
+          </button>
+        </div>
+      </div>
+
+      {/* LOJA RECALIBRADA - ARTIGOS DE LUXO */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 border-b border-border pb-2">
+          <ShoppingBag className="w-4 h-4 text-muted-foreground" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Mercado de Cosméticos Raros</h2>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {lojaCores.map((cor) => {
+            const jaComprou = purchasedColors.includes(cor.id);
+            const equipado = activeColor === cor.id;
+
+            return (
+              <div key={cor.id} className="bg-background border border-border p-4 rounded-xl flex items-center justify-between shadow-sm hover:border-zinc-400 dark:hover:border-zinc-700 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-border ${cor.classe}`}>
+                    <Palette className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className={`font-bold text-sm ${cor.classe}`}>{cor.name}</h3>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <Coins className="w-3 h-3 text-amber-500" /> {cor.preco} NX\$
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  onClick={() => handleBuyColor(cor.id, cor.preco)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    equipado
+                      ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 flex items-center gap-1 cursor-default"
+                      : jaComprou
+                      ? "bg-zinc-100 dark:bg-zinc-800 text-foreground border border-border"
+                      : "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950 font-semibold hover:opacity-90 active:scale-95"
+                  }`}
+                >
+                  {equipado ? <><Check className="w-3 h-3" /> Ativo</> : jaComprou ? "Equipar" : "Comprar"}
+                </button>
               </div>
-              <div className={`text-sm font-semibold ${isCredit ? "text-live" : "text-foreground"}`}>
-                {isCredit ? "+" : ""}
-                {tx.amount.toLocaleString("pt-BR")}
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-amber-500/20 bg-gradient-to-br from-zinc-950 via-zinc-900 to-amber-950/30 p-4 sm:p-5 shadow-[0_18px_40px_rgba(0,0,0,0.12)]">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2 text-amber-400">
+                <Wallet className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-[0.18em] text-amber-300">Loja de Câmbio</h2>
+                <p className="text-[11px] text-zinc-300">Injetar fundos com Pix em segundos</p>
               </div>
             </div>
-          );
-        })}
-      </Card>
+
+            <div className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+              <ShieldCheck className="w-3 h-3" />
+              Verificado
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {moedasPackages.map((pkg) => {
+            const isLoading = loadingPackageId === pkg.id;
+
+            return (
+              <div
+                key={pkg.id}
+                className={`relative flex h-full flex-col overflow-hidden rounded-2xl border p-4 shadow-sm transition-all duration-200 ${
+                  pkg.highlight
+                    ? "border-amber-400/50 bg-gradient-to-br from-amber-500/10 via-background to-yellow-500/10 shadow-[0_12px_30px_rgba(251,191,36,0.12)]"
+                    : "border-border bg-background"
+                }`}
+              >
+                <div className={`mb-4 rounded-xl bg-gradient-to-r ${pkg.accent} p-[1px]`}>
+                  <div className="rounded-[10px] bg-background/90 px-2.5 py-2 text-center">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-foreground/80">{pkg.badge}</span>
+                  </div>
+                </div>
+
+                {pkg.highlight && (
+                  <span className="absolute -top-3 left-4 inline-flex items-center rounded-full border border-amber-500/50 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-950 shadow-lg shadow-amber-500/20">
+                    Mais Vendido
+                  </span>
+                )}
+
+                <div className="space-y-4 pt-1 flex-1 flex flex-col">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-foreground">{pkg.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Pagamento via Pix</p>
+                    </div>
+                    <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-amber-500">
+                      +{pkg.coins} NX$
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3">
+                    <span className="text-2xl font-black text-foreground">{pkg.price}</span>
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                  </div>
+
+                  <div className="mt-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleBuyCoinsPackage(pkg.id, pkg.coins)}
+                      disabled={isLoading}
+                      className={`w-full rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${
+                        isLoading
+                          ? "bg-amber-500/80 text-amber-950 cursor-wait shadow-lg shadow-amber-500/20"
+                          : pkg.highlight
+                          ? "bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 text-amber-950 hover:brightness-105"
+                          : "bg-zinc-950 text-white hover:opacity-90 dark:bg-zinc-50 dark:text-zinc-950"
+                      }`}
+                    >
+                      {isLoading ? "Aprovando Pix..." : `Comprar ${pkg.name}`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      </div>
     </AppShell>
+  );
+}
+
+export default function CarteiraPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-10 text-muted-foreground">Carregando carteira...</div>}>
+      <CarteiraContent />
+    </Suspense>
   );
 }

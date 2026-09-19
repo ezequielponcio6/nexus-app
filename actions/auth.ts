@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { authRateLimit } from "@/lib/rate-limit";
+import { sanitizeTextInput } from "@/lib/sanitize";
 
 export type AuthState = { error: string | null };
 
@@ -44,7 +45,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  const displayName = String(formData.get("display_name") ?? "").trim();
+  const displayName = sanitizeTextInput(formData.get("display_name") ?? "", 80);
 
   if (!email || !password || !displayName) {
     return { error: "Preencha todos os campos." };

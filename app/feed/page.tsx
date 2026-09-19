@@ -10,6 +10,8 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { PremiumVipBadge } from "@/components/ui/premium-vip-badge";
+import { sanitizeTextInput } from "@/lib/sanitize";
 
 interface Post {
   id: string;
@@ -148,6 +150,12 @@ function FeedContent() {
       return;
     }
 
+    const sanitizedText = sanitizeTextInput(postText, 3000);
+    if (!sanitizedText.trim() && !selectedFile) {
+      alert("O conteúdo do post contém texto inválido ou bloqueado por segurança.");
+      return;
+    }
+
     try {
       setSending(true);
 
@@ -195,7 +203,7 @@ function FeedContent() {
 
       const { error } = await supabase.from("posts").insert({
         user_id: user.id,
-        content: postText.trim(),
+        content: sanitizedText,
         media_url: uploadedMediaUrl,
         media_type: fileType,
       });
@@ -255,9 +263,12 @@ function FeedContent() {
                 <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-muted-foreground">
                   U
                 </div>
-                <span className="text-sm font-semibold text-foreground">
-                  Usuário do Nexus
-                </span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-semibold text-foreground truncate">
+                    Usuário do Nexus
+                  </span>
+                  <PremiumVipBadge className="shrink-0" />
+                </div>
                 <span className="text-xs text-muted-foreground">
                   {new Date(post.created_at).toLocaleDateString("pt-BR")}
                 </span>

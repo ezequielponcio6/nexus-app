@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { sanitizeTextInput } from "@/lib/sanitize";
 import type { FeedAlgoMode } from "@/types/database.types";
 
 export type ProfileActionState = { error: string | null; success?: boolean };
@@ -10,8 +11,8 @@ export async function updateProfile(
   _prev: ProfileActionState,
   formData: FormData
 ): Promise<ProfileActionState> {
-  const displayName = String(formData.get("display_name") ?? "").trim();
-  const bio = String(formData.get("bio") ?? "").trim();
+  const displayName = sanitizeTextInput(formData.get("display_name") ?? "", 80);
+  const bio = sanitizeTextInput(formData.get("bio") ?? "", 280);
 
   if (!displayName) return { error: "O nome de exibição não pode ficar vazio." };
   if (bio.length > 280) return { error: "A bio excede 280 caracteres." };

@@ -230,8 +230,8 @@ function FeedContent() {
     }
   };
 
-  return (
-    <div className="w-full max-w-2xl mx-auto p-4 space-y-6">
+      return (
+    <div className="w-full max-w-2xl mx-auto p-4 space-y-6 relative">
       <h1 className="text-xl font-bold border-b border-border pb-4 text-foreground">
         Seu Feed
       </h1>
@@ -255,11 +255,9 @@ function FeedContent() {
                 <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-muted-foreground">
                   U
                 </div>
-
                 <span className="text-sm font-semibold text-foreground">
                   Usuário do Nexus
                 </span>
-
                 <span className="text-xs text-muted-foreground">
                   {new Date(post.created_at).toLocaleDateString("pt-BR")}
                 </span>
@@ -290,7 +288,6 @@ function FeedContent() {
                 </div>
               )}
 
-              {/* Trecho final que estava cortado foi corrigido e fechado abaixo */}
               <div className="flex gap-4 pt-2 border-t border-border/50 text-muted-foreground">
                 <button
                   type="button"
@@ -299,7 +296,6 @@ function FeedContent() {
                   <Heart className="w-4 h-4" />
                   Curtir
                 </button>
-                
                 <button
                   type="button"
                   className="flex items-center gap-1 text-xs hover:text-blue-500 transition-colors"
@@ -312,11 +308,114 @@ function FeedContent() {
           ))}
         </div>
       )}
+
+      {/* ================= MODAL DE NOVA PUBLICAÇÃO ================= */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-background border border-border w-full max-w-lg rounded-xl shadow-xl overflow-hidden flex flex-col">
+            {/* Cabeçalho do Modal */}
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="font-semibold text-foreground">Criar Publicação</h2>
+              <button 
+                type="button"
+                onClick={closeModal}
+                className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Formulário */}
+            <form onSubmit={handlePostSubmit} className="p-4 space-y-4">
+              <textarea
+                value={postText}
+                onChange={(e) => setPostText(e.target.value)}
+                placeholder="No que você está pensando?"
+                className="w-full min-h-[120px] bg-transparent resize-none outline-none text-sm text-foreground placeholder:text-muted-foreground"
+                maxLength={280}
+              />
+
+              {/* Preview do Arquivo Selecionado */}
+              {filePreview && (
+                <div className="relative rounded-lg overflow-hidden border border-border bg-muted/10 max-h-48 flex items-center justify-center">
+                  {fileType === "image" ? (
+                    <img src={filePreview} alt="Preview" className="object-contain max-h-48 w-full" />
+                  ) : (
+                    <video src={filePreview} controls className="max-h-48 w-full" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={removeFile}
+                    className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Barra de Ferramentas / Botões Inferiores */}
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                {/* Inputs de arquivo ocultos controlados pelo useRef ou disparados por função */}
+                <div className="flex items-center gap-2">
+                  {/* Botão de Imagem */}
+                  <input
+                    type="file"
+                    id="image-upload"
+                    onChange={(e) => handleFileChange(e, "image")}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="image-upload"
+                    className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                    title="Adicionar imagem (Até 2MB)"
+                  >
+                    <ImageIcon className="w-5 h-5" />
+                  </label>
+
+                  {/* Botão de Vídeo */}
+                  <input
+                    type="file"
+                    id="video-upload"
+                    onChange={(e) => handleFileChange(e, "video")}
+                    accept="video/*"
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="video-upload"
+                    className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                    title="Adicionar vídeo (Até 5MB)"
+                  >
+                    <VideoIcon className="w-5 h-5" />
+                  </label>
+                </div>
+
+                {/* Ações: Cancelar e Publicar */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="px-4 py-2 bg-transparent text-muted-foreground hover:text-foreground rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sending || (!postText.trim() && !selectedFile)}
+                    className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-zinc-100 dark:text-zinc-900 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  >
+                    {sending ? "Publicando..." : "Publicar"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// 2. Exportação padrão protegendo o uso do useSearchParams() com Suspense
 export default function FeedPage() {
   return (
     <Suspense fallback={<div className="text-center py-10">Carregando...</div>}>

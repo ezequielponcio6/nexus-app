@@ -1,23 +1,23 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Home, Compass, SquarePlus, User, Settings, Wallet } from "lucide-react";
 import { SignOutButton } from "./sign-out-button"; 
 import { ThemeToggle } from "./theme-toggle";   
-import { createClient } from "@/lib/supabase/client"; // Importa o cliente do supabase para checar a sessão
+import { createClient } from "@/lib/supabase/client";
 
 interface AppShellProps {
   children: React.ReactNode;
   user: any;
 }
 
-export function AppShell({ children, user: initialUser }: AppShellProps) {
+function AppShellContent({ children, user: initialUser }: AppShellProps) {
   const activePath = usePathname() || "";
+  const searchParams = useSearchParams();
   const [currentUser, setCurrentUser] = useState(initialUser);
 
-  // Busca o usuário logado diretamente se ele não tiver vindo por propriedade
   useEffect(() => {
     if (!currentUser) {
       const supabase = createClient();
@@ -29,7 +29,6 @@ export function AppShell({ children, user: initialUser }: AppShellProps) {
     }
   }, [currentUser]);
 
-  // Se não encontrar o usuário logado de jeito nenhum, joga para "convidado" em vez de "feed"
   let usernameFallback = "convidado";
 
   if (currentUser?.user_metadata?.username) {
@@ -61,11 +60,16 @@ export function AppShell({ children, user: initialUser }: AppShellProps) {
           <nav className="flex flex-col gap-1">
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
               const safeHref = href || "/feed";
-              const active =
-                activePath === safeHref ||
-                (safeHref.startsWith("/feed?")
-                  ? activePath === "/feed"
-                  : activePath.startsWith(safeHref + "/"));
+              
+              // Separação inteligente das rotas
+              let active = false;
+              if (safeHref === "/feed?new=true") {
+                active = activePath === "/feed" && searchParams.get("new") === "true";
+              } else if (safeHref === "/feed") {
+                active = activePath === "/feed" && searchParams.get("new") !== "true";
+              } else {
+                active = activePath === safeHref || activePath.startsWith(safeHref + "/");
+              }
 
               return (
                 <Link
@@ -102,11 +106,15 @@ export function AppShell({ children, user: initialUser }: AppShellProps) {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-md flex items-center justify-around p-2 z-50">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const safeHref = href || "/feed";
-          const active =
-            activePath === safeHref ||
-            (safeHref.startsWith("/feed?")
-              ? activePath === "/feed"
-              : activePath.startsWith(safeHref + "/"));
+          
+          let active = false;
+          if (safeHref === "/feed?new=true") {
+            active = activePath === "/feed" && searchParams.get("new") === "true";
+          } else if (safeHref === "/feed") {
+            active = activePath === "/feed" && searchParams.get("new") !== "true";
+          } else {
+            active = activePath === safeHref || activePath.startsWith(safeHref + "/");
+          }
 
           return (
             <Link
@@ -123,5 +131,14 @@ export function AppShell({ children, user: initialUser }: AppShellProps) {
         })}
       </nav>
     </div>
+  );
+}
+
+// Envelopado em Suspense para evitar erros no build de produção do Next.js
+export function AppShell(props: AppShellProps) {
+  return (
+    <Suspense fallback={<div className="p-6 text-muted-foreground">Carregando menu...</div>}>
+      <AppShellContent {...props} />
+    </Suspense>
   );
 }

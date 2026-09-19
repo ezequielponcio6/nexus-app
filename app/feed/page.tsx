@@ -1,215 +1,325 @@
 "use client";
 
-import { useState, Suspense, useRef } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Image as ImageIcon, Video as VideoIcon, X } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Video as VideoIcon,
+  X,
+  Heart,
+  MessageCircle,
+} from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
+interface Post {
+  id: string;
+  content: string;
+  media_url: string | null;
+  media_type: string | null;
+  created_at: string;
+  user_id: string;
+}
+
+// 1. O conteúdo principal fica aqui dentro
 function FeedContent() {
+  const supabase = createClient();
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
   const [postText, setPostText] = useState("");
-  
-  // Estados para controlar o arquivo anexado
+  const [sending, setSending] = useState(false);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [fileType, setFileType] = useState<"image" | "video" | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const isModalOpen = searchParams.get("new") === "true";
 
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        setLoading(true);
+
+        const { data, error } = await supabase
+          .from("posts")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        setPosts((data as Post[]) || []);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Erro desconhecido ao buscar posts.";
+
+        console.error("Erro ao buscar posts:", message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchPosts();
+  }, [supabase]);
+
+  const removeFile = () => {
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+    }
+
+    setSelectedFile(null);
+    setFilePreview(null);
+    setFileType(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const closeModal = () => {
-    // Limpa os arquivos ao fechar
     removeFile();
+    setPostText("");
     router.push("/feed");
   };
 
-  // Função para validar o arquivo selecionado (Limite de MB)
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, allowedType: "image" | "video") => {
+  const handleFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    allowedType: "image" | "video"
+  ) => {
     const file = e.target.files?.[0];
-    if (!file) return;
 
-    // Define os limites em Bytes (1 MB = 1024 * 1024 Bytes)
-    const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
-    const MAX_VIDEO_SIZE = 5 * 1024 * 1024; // 5MB
+    if (!file) {
+      return;
+    }
+
+    const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+    const MAX_VIDEO_SIZE = 5 * 1024 * 1024;
 
     if (allowedType === "image" && !file.type.startsWith("image/")) {
-      alert("Por favor, selecione apenas arquivos de imagem!");
+      alert("Selecione uma imagem!");
+      e.target.value = "";
       return;
     }
 
     if (allowedType === "video" && !file.type.startsWith("video/")) {
-      alert("Por favor, selecione apenas arquivos de vídeo!");
+      alert("Selecione um vídeo!");
+      e.target.value = "";
       return;
     }
 
-    // Validação de Tamanho (Onde evitamos o B.O no futuro)
     if (allowedType === "image" && file.size > MAX_IMAGE_SIZE) {
-      alert("A imagem é muito grande! Escolha uma foto de até 2MB.");
+      alert("Imagem deve ter até 2MB!");
+      e.target.value = "";
       return;
     }
 
     if (allowedType === "video" && file.size > MAX_VIDEO_SIZE) {
-      alert("O vídeo é muito grande! Escolha um arquivo de até 5MB.");
+      alert("Vídeo deve ter até 5MB!");
+      e.target.value = "";
       return;
     }
 
-    // Guarda o arquivo e cria um link temporário para exibir na tela antes de postar
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+
     setSelectedFile(file);
     setFileType(allowedType);
-    setFilePreview(URL.createObjectURL(file));
+    setFilePreview(previewUrl);
   };
 
-  const removeFile = () => {
-    if (filePreview) URL.revokeObjectURL(filePreview);
-    setSelectedFile(null);
-    setFilePreview(null);
-    setFileType(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handlePostSubmit = (e: React.FormEvent) => {
+  const handlePostSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!postText.trim() && !selectedFile) return;
 
-    // Temporário até conectarmos ao banco do Supabase
-    alert(
-      `Publicação criada!\nTexto: "${postText}"\nArquivo anexado: ${
-        selectedFile ? `selectedFile.name ({fileType})` : "Nenhum"
-      }`
-    );
+    if (!postText.trim() && !selectedFile) {
+      return;
+    }
 
-    setPostText("");
-    closeModal();
+    if (sending) {
+      return;
+    }
+
+    try {
+      setSending(true);
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        alert("Você precisa estar logado para publicar!");
+        return;
+      }
+
+      let uploadedMediaUrl: string | null = null;
+
+      if (selectedFile) {
+        const fileExt =
+          selectedFile.name.split(".").pop()?.toLowerCase() || "file";
+
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("media")
+          .upload(filePath, selectedFile, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: selectedFile.type,
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(filePath);
+
+        uploadedMediaUrl = publicUrlData.publicUrl;
+      }
+
+      const { error } = await supabase.from("posts").insert({
+        user_id: user.id,
+        content: postText.trim(),
+        media_url: uploadedMediaUrl,
+        media_type: fileType,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const { data: updatedPosts, error: fetchError } = await supabase
+        .from("posts")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      setPosts((updatedPosts as Post[]) || []);
+
+      closeModal();
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro desconhecido ao criar publicação.";
+
+      console.error("Erro ao criar publicação:", error);
+
+      alert(`Erro ao criar publicação: ${message}`);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
-    <div className="w-full">
-      <div className="text-center text-muted-foreground mt-20">
-        Ainda não há posts por aqui. Que tal publicar o primeiro?
-      </div>
+    <div className="w-full max-w-2xl mx-auto p-4 space-y-6">
+      <h1 className="text-xl font-bold border-b border-border pb-4 text-foreground">
+        Seu Feed
+      </h1>
 
-      {/* MODAL COM ARQUIVOS E LIMITES DE MB */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-start justify-center z-50 p-4 pt-20 md:pt-32">
-          <div className="bg-background border border-border rounded-2xl w-full max-w-lg shadow-2xl p-5 relative flex flex-col gap-4">
-            
-            {/* Cabeçalho */}
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-base font-bold text-foreground">Nova Publicação</h2>
-              <button onClick={closeModal} className="text-muted-foreground hover:text-foreground text-sm p-1 rounded-md hover:bg-accent transition-colors">
-                ✕
-              </button>
-            </div>
-            
-            {/* Área de Texto */}
-            <form onSubmit={handlePostSubmit} className="space-y-4">
-              <div className="flex gap-3 items-start">
-                <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-sm text-muted-foreground shrink-0">
+      {loading ? (
+        <div className="text-center py-10 text-muted-foreground">
+          Carregando publicações...
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="text-center text-muted-foreground mt-10 bg-zinc-50 dark:bg-zinc-900/50 p-8 rounded-xl border border-dashed border-border">
+          Ainda não há posts por aqui. Que tal publicar o primeiro?
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {posts.map((post) => (
+            <div
+              key={post.id}
+              className="bg-background border border-border p-4 rounded-xl shadow-sm space-y-3"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-xs font-bold text-muted-foreground">
                   U
                 </div>
-                
-                <div className="w-full space-y-3">
-                  <textarea
-                    value={postText}
-                    onChange={(e) => setPostText(e.target.value)}
-                    placeholder="O que você quer compartilhar hoje?"
-                    className="w-full h-24 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-base pt-1"
-                    maxLength={280}
-                  />
 
-                  {/* PREVIEW DO ARQUIVO ANEXADO (Se houver) */}
-                  {filePreview && (
-                    <div className="relative rounded-xl overflow-hidden border border-border bg-muted/30 max-h-60 flex items-center justify-center">
-                      <button
-                        type="button"
-                        onClick={removeFile}
-                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors z-10"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                <span className="text-sm font-semibold text-foreground">
+                  Usuário do Nexus
+                </span>
 
-                      {fileType === "image" ? (
-                        <img src={filePreview} alt="Preview do anexo" className="object-contain max-h-60 w-full" />
-                      ) : (
-                        <video src={filePreview} controls className="max-h-60 w-full" />
-                      )}
-                    </div>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(post.created_at).toLocaleDateString("pt-BR")}
+                </span>
+              </div>
+
+              {post.content && (
+                <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                  {post.content}
+                </p>
+              )}
+
+              {post.media_url && (
+                <div className="rounded-lg overflow-hidden border border-border bg-muted/20 max-h-80 flex items-center justify-center">
+                  {post.media_type === "image" ? (
+                    <img
+                      src={post.media_url}
+                      alt="Imagem da publicação"
+                      className="object-contain max-h-80 w-full"
+                    />
+                  ) : (
+                    <video
+                      src={post.media_url}
+                      controls
+                      preload="metadata"
+                      className="max-h-80 w-full"
+                    />
                   )}
                 </div>
-              </div>
-              
-              {/* Controles Ocultos de Input */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept="image/*,video/*"
-                onChange={(e) => {
-                  const type = e.target.files?.[0]?.type.startsWith("video/") ? "video" : "image";
-                  handleFileChange(e, type);
-                }}
-              />
+              )}
 
-              {/* Barra Inferior com Ícones e Botão de Envio */}
-              <div className="flex items-center justify-between border-t border-border pt-4">
-                {/* Botões de Mídia Estilo Twitter */}
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    disabled={!!selectedFile}
-                    onClick={() => {
-                      if (fileInputRef.current) {
-                        fileInputRef.current.accept = "image/*";
-                        fileInputRef.current.click();
-                      }
-                    }}
-                    className="p-2 text-zinc-600 hover:bg-accent rounded-full transition-colors disabled:opacity-30"
-                    title="Adicionar imagem (Máx 2MB)"
-                  >
-                    <ImageIcon className="w-5 h-5" />
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={!!selectedFile}
-                    onClick={() => {
-                      if (fileInputRef.current) {
-                        fileInputRef.current.accept = "video/*";
-                        fileInputRef.current.click();
-                      }
-                    }}
-                    className="p-2 text-zinc-600 hover:bg-accent rounded-full transition-colors disabled:opacity-30"
-                    title="Adicionar vídeo (Máx 5MB)"
-                  >
-                    <VideoIcon className="w-5 h-5" />
-                  </button>
-                </div>
+              {/* Trecho final que estava cortado foi corrigido e fechado abaixo */}
+              <div className="flex gap-4 pt-2 border-t border-border/50 text-muted-foreground">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs hover:text-rose-500 transition-colors"
+                >
+                  <Heart className="w-4 h-4" />
+                  Curtir
+                </button>
                 
-                <div className="flex gap-2 items-center">
-                  <span className="text-xs text-muted-foreground mr-2">
-                    {280 - postText.length}
-                  </span>
-                  <button
-                    type="submit"
-                    disabled={!postText.trim() && !selectedFile}
-                    className="px-5 py-2 text-sm font-semibold text-white bg-zinc-950 dark:bg-zinc-50 dark:text-zinc-950 rounded-full hover:opacity-90 transition-opacity disabled:opacity-40 shadow-sm"
-                  >
-                    Publicar
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs hover:text-blue-500 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Comentar
+                </button>
               </div>
-            </form>
-
-          </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
+// 2. Exportação padrão protegendo o uso do useSearchParams() com Suspense
 export default function FeedPage() {
   return (
-    <Suspense fallback={<div className="text-center mt-20 text-muted-foreground">Carregando feed...</div>}>
+    <Suspense fallback={<div className="text-center py-10">Carregando...</div>}>
       <FeedContent />
     </Suspense>
   );

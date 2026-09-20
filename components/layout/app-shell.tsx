@@ -9,6 +9,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { createClient } from "@/lib/supabase/client";
 import { PremiumVipBadge } from "@/components/ui/premium-vip-badge";
 import { Avatar } from "@/components/ui/avatar";
+import { DirectMessages } from "./direct-messages";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -253,6 +254,7 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
           );
         })}
       </nav>
+      <DirectMessages />
     </div>
   );
 }

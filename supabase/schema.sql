@@ -129,6 +129,30 @@ create index idx_likes_post on public.likes (post_id);
 create index idx_likes_comment on public.likes (comment_id);
 
 -- ---------------------------------------------------------------------
+-- MESSAGES — mensagens diretas persistentes entre usuários
+-- ---------------------------------------------------------------------
+create table public.messages (
+  id           uuid primary key default gen_random_uuid(),
+  sender_id    uuid not null references public.profiles(id) on delete cascade,
+  receiver_id  uuid not null references public.profiles(id) on delete cascade,
+  content      text,
+  media_url    text,
+  created_at   timestamptz not null default now(),
+  constraint messages_content_check check (content is not null or media_url is not null),
+  constraint messages_no_self check (sender_id <> receiver_id)
+);
+
+create index idx_messages_conversation on public.messages (sender_id, receiver_id, created_at asc);
+alter table public.messages enable row level security;
+
+create policy "messages_participants_select" on public.messages
+  for select using (auth.uid() = sender_id or auth.uid() = receiver_id);
+create policy "messages_sender_insert" on public.messages
+  for insert with check (auth.uid() = sender_id);
+
+alter publication supabase_realtime add table public.messages;
+
+-- ---------------------------------------------------------------------
 -- FOLLOWS
 -- ---------------------------------------------------------------------
 create table public.follows (
@@ -456,7 +480,7 @@ alter publication supabase_realtime add table public.likes;
 -- =========================================================================
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values
-  ('post-media', 'post-media', true, 10485760, array['image/jpeg','image/png','image/webp','image/gif']),
+  ('post-media', 'post-media', true, 10485760, array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document']),
   ('avatars', 'avatars', true, 2097152, array['image/jpeg','image/png','image/webp'])
 on conflict (id) do nothing;
 

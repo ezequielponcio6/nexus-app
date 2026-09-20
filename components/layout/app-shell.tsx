@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowUpRight, Compass, Home, Settings, SquarePlus, TrendingUp, User, Users, Wallet } from "lucide-react";
+import { ArrowUpRight, Bell, Compass, Home, Settings, SquarePlus, TrendingUp, User, Users, Wallet } from "lucide-react";
 import { SignOutButton } from "./sign-out-button"; 
 import { ThemeToggle } from "./theme-toggle";   
 import { createClient } from "@/lib/supabase/client";
@@ -23,12 +23,23 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
   const [currentUser, setCurrentUser] = useState(initialUser);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [followedCreators, setFollowedCreators] = useState<Record<string, boolean>>({});
+  const [unreadNotifications, setUnreadNotifications] = useState(3);
 
   useEffect(() => {
     const syncAvatar = () => setAvatarUrl(localStorage.getItem("nexus_avatar_url"));
     syncAvatar();
     window.addEventListener("storage", syncAvatar);
     return () => window.removeEventListener("storage", syncAvatar);
+  }, []);
+
+  useEffect(() => {
+    const syncUnreadNotifications = () => {
+      const stored = Number(localStorage.getItem("nexus_notifications_unread"));
+      setUnreadNotifications(Number.isFinite(stored) ? Math.max(0, stored) : 3);
+    };
+    syncUnreadNotifications();
+    window.addEventListener("storage", syncUnreadNotifications);
+    return () => window.removeEventListener("storage", syncUnreadNotifications);
   }, []);
 
   useEffect(() => {
@@ -58,6 +69,7 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
     { href: "/explorar", label: "Explorar", icon: Compass },
     { href: "/feed?new=true", label: "Publicar", icon: SquarePlus },
     { href: "/carteira", label: "Carteira", icon: Wallet },
+    { href: "/notificacoes", label: "Notificações", icon: Bell, badge: unreadNotifications },
     { href: `/perfil/${usernameFallback}`, label: "Perfil", icon: User },
     { href: "/configuracoes", label: "Configurações", icon: Settings },
   ];
@@ -87,7 +99,7 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
             Nexus
           </Link>
           <nav className="flex flex-col gap-1">
-            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
               const safeHref = href || "/feed";
               
               // Separação inteligente das rotas
@@ -111,7 +123,10 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
                   }`}
                 >
                   <Icon className="w-5 h-5" />
-                  {label}
+                  <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                    {label}
+                    {badge ? <span className="min-w-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white">{badge}</span> : null}
+                  </span>
                 </Link>
               );
             })}
@@ -120,8 +135,14 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
         <div className="space-y-4">
           <div className="flex items-center justify-between px-3">
             <div className="flex items-center gap-2 min-w-0">
-              <Avatar name={usernameFallback} src={avatarUrl} size={28} />
-              <span className="text-sm font-medium text-foreground truncate">{usernameFallback}</span>
+              <div className="relative shrink-0">
+                <Avatar name={usernameFallback} src={avatarUrl} size={28} />
+                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" />
+              </div>
+              <div className="min-w-0">
+                <span className="block truncate text-[10px] font-medium text-emerald-500">• Ativo agora</span>
+                <span className="block truncate text-sm font-medium text-foreground">{usernameFallback}</span>
+              </div>
               <PremiumVipBadge className="shrink-0" />
             </div>
             <ThemeToggle />
@@ -152,7 +173,10 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
               {SUGGESTED_CREATORS.map((creator) => (
                 <div key={creator.username} className="flex items-center gap-2 rounded-xl p-2 transition-colors hover:bg-muted/60">
                   <Link href={`/perfil/${creator.username}`} className="flex min-w-0 flex-1 items-center gap-3">
-                    <img src={creator.avatar} alt={`Avatar de ${creator.name}`} className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-background" />
+                    <span className="relative shrink-0">
+                      <img src={creator.avatar} alt={`Avatar de ${creator.name}`} className="h-10 w-10 rounded-full object-cover ring-2 ring-background" />
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" />
+                    </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
                       {creator.name}

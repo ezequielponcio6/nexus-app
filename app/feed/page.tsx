@@ -16,6 +16,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { PersistentPostActions } from "@/components/feed/persistent-post-actions";
 import { Avatar } from "@/components/ui/avatar";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 
 interface Post {
   id: string;
@@ -90,7 +91,16 @@ function FeedContent() {
         throw error;
       }
 
-      setPosts(data || []);
+      const loadedPosts = (data as Post[]) || [];
+      setPosts(loadedPosts);
+
+      const openPostId = searchParams.get("openPost");
+      if (openPostId) {
+        const postToExpand = loadedPosts.find((post) => post.id === openPostId);
+        if (postToExpand?.media_urls?.[0]) {
+          setExpandedPost(postToExpand);
+        }
+      }
     } catch (err: any) {
       console.error("Erro ao buscar posts:", err.message);
     } finally {
@@ -392,7 +402,7 @@ function FeedContent() {
                 <div className="flex min-w-0 items-baseline gap-2">
                   <span className={`truncate text-sm font-bold ${activeColor}`}>@cole.duda1789</span>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {new Date(post.created_at).toLocaleDateString("pt-BR")}
+                    {formatRelativeTime(post.created_at)}
                   </span>
                 </div>
 
@@ -456,7 +466,7 @@ function FeedContent() {
                 <Avatar name="Cole Duda" size={40} className="h-10 w-10 rounded-full" />
                 <div className="min-w-0">
                   <p className={`truncate text-sm font-bold ${activeColor}`}>@cole.duda1789</p>
-                  <p className="text-xs text-muted-foreground">{new Date(expandedPost.created_at).toLocaleDateString("pt-BR")}</p>
+                  <p className="text-xs text-muted-foreground">{formatRelativeTime(expandedPost.created_at)}</p>
                 </div>
               </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { Wallet, Coins, Award, Palette, ShoppingBag, Check, Flame, ShieldCheck, Sparkles, Gem } from "lucide-react";
+import { Wallet, Coins, Award, Palette, ShoppingBag, Check, Flame, ShieldCheck, Sparkles, Gem, Copy, QrCode, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 
 function CarteiraContent() {
@@ -15,6 +15,18 @@ function CarteiraContent() {
   const [activeColor, setActiveColor] = useState("text-foreground");
   const [loadingPackageId, setLoadingPackageId] = useState<string | null>(null);
   const [activeVipPlan, setActiveVipPlan] = useState<string | null>(null);
+  const [cashoutOpen, setCashoutOpen] = useState(false);
+  const [pixKey, setPixKey] = useState("");
+  const [cashoutReceipt, setCashoutReceipt] = useState<{
+    grossCoins: number;
+    platformFee: number;
+    netCoins: number;
+    netReais: number;
+    pixKey: string;
+  } | null>(null);
+  const [checkoutPackage, setCheckoutPackage] = useState<{ id: string; name: string; coins: number; price: string } | null>(null);
+  const [pixCode, setPixCode] = useState("");
+  const [copiedPix, setCopiedPix] = useState(false);
 
   useEffect(() => {
     const savedCoins = localStorage.getItem("nexus_coins");
@@ -152,18 +164,32 @@ function CarteiraContent() {
     alert("Upgrade de perfil comprado e equipado com sucesso! 💎");
   };
 
-  const handleBuyCoinsPackage = async (packageId: string, amount: number) => {
-    setLoadingPackageId(packageId);
+  const handleBuyCoinsPackage = (packageId: string) => {
+    const selectedPackage = moedasPackages.find((pkg) => pkg.id === packageId);
+    if (!selectedPackage) return;
 
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    setCheckoutPackage({
+      id: selectedPackage.id,
+      name: selectedPackage.name,
+      coins: selectedPackage.coins,
+      price: selectedPackage.price,
+    });
+    setPixCode(`00020126580014BR.GOV.BCB.PIX0136NEXUS-${selectedPackage.id}-${crypto.randomUUID()}`);
+    setCopiedPix(false);
+  };
 
-    const novoSaldo = coins + amount;
+  const handleConfirmPixPayment = async () => {
+    if (!checkoutPackage || loadingPackageId) return;
+    setLoadingPackageId(checkoutPackage.id);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    const novoSaldo = coins + checkoutPackage.coins;
     setCoins(novoSaldo);
     localStorage.setItem("nexus_coins", novoSaldo.toString());
     setLoadingPackageId(null);
-
-    const packageName = moedasPackages.find((pkg) => pkg.id === packageId)?.name ?? "Pacote";
-    alert(`${packageName} carregado com sucesso! +${amount} NX$ adicionados à sua carteira.`);
+    alert(`${checkoutPackage.name} aprovado! +${checkoutPackage.coins} NX$ adicionados à sua carteira.`);
+    setCheckoutPackage(null);
+    setPixCode("");
   };
 
   const handleVipSubscription = (planId: string, price: number) => {
@@ -195,12 +221,95 @@ function CarteiraContent() {
     alert(`Plano ${vipPlans.find((plan) => plan.id === planId)?.name ?? "VIP"} ativado com sucesso!`);
   };
 
+  const handleCashoutRequest = () => {
+    const currentCoins = Number(localStorage.getItem("nexus_coins") ?? coins);
+    const safeCoins = Number.isFinite(currentCoins) && currentCoins >= 0 ? currentCoins : 0;
+
+    if (safeCoins < 1000) {
+      alert("Saldo mínimo para resgate: 1000 NX$. Continue minerando para liberar o cash-out.");
+      return;
+    }
+
+    setCashoutOpen(true);
+  };
+
+  const confirmCashout = () => {
+    const trimmedPixKey = pixKey.trim();
+    if (!trimmedPixKey) {
+      alert("Informe sua Chave Pix para solicitar o resgate.");
+      return;
+    }
+
+    const grossCoins = Number(localStorage.getItem("nexus_coins") ?? coins);
+    if (!Number.isFinite(grossCoins) || grossCoins < 1000) {
+      setCashoutOpen(false);
+      alert("Saldo insuficiente para concluir o cash-out.");
+      return;
+    }
+
+    const platformFee = Math.floor(grossCoins * 0.2);
+    const netCoins = grossCoins - platformFee;
+    const netReais = netCoins * 0.01;
+
+    setCoins(0);
+    localStorage.setItem("nexus_coins", "0");
+    setCashoutReceipt({ grossCoins, platformFee, netCoins, netReais, pixKey: trimmedPixKey });
+    setCashoutOpen(false);
+    setPixKey("");
+  };
+
   return (
     <AppShell activePath="/carteira">
-      <div className="w-full max-w-3xl mx-auto p-4 space-y-8 animate-in fade-in duration-300">
+      <div className="w-full max-w-3xl mx-auto p-4 pb-12 space-y-8 animate-in fade-in duration-300">
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-xl font-bold text-foreground">Sua Carteira</h1>
+
+      {checkoutPackage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Gateway de pagamento Pix">
+          <div className="relative w-full max-w-md rounded-3xl border border-amber-500/30 bg-card p-5 shadow-2xl sm:p-6">
+            <button type="button" onClick={() => setCheckoutPackage(null)} className="absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Fechar gateway Pix">
+              <X className="h-4 w-4" />
+            </button>
+            <div className="pr-8">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-500">Gateway Pix Nexus</p>
+              <h2 className="mt-2 text-xl font-black text-foreground">{checkoutPackage.name}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{checkoutPackage.coins} NX$ por {checkoutPackage.price}</p>
+            </div>
+
+            <div className="mt-5 flex justify-center rounded-2xl border border-border bg-zinc-100 p-5 dark:bg-zinc-900">
+              <div className="flex h-40 w-40 flex-col items-center justify-center gap-2 rounded-xl border-4 border-dashed border-zinc-400 text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
+                <QrCode className="h-20 w-20" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em]">QR Pix simulado</span>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <label htmlFor="pix-copy-paste" className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Pix Copia e Cola</label>
+              <div className="mt-2 flex gap-2">
+                <input id="pix-copy-paste" readOnly value={pixCode} className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground outline-none" />
+                <button
+                  type="button"
+                  onClick={() => { void navigator.clipboard?.writeText(pixCode); setCopiedPix(true); }}
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-muted"
+                >
+                  {copiedPix ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedPix ? "Copiado" : "Copiar"}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleConfirmPixPayment}
+              disabled={Boolean(loadingPackageId)}
+              className="mt-6 w-full rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 px-4 py-3 text-xs font-black text-amber-950 transition-all hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
+            >
+              {loadingPackageId ? "Confirmando com o banco..." : "Confirmar Pagamento (Simular Aprovação)"}
+            </button>
+          </div>
+        </div>
+      )}
           <p className="text-xs text-muted-foreground mt-0.5">Participe diariamente da rede para minerar moedas e desbloquear cosméticos.</p>
         </div>
 
@@ -225,6 +334,13 @@ function CarteiraContent() {
             <span className="text-3xl font-black tracking-tight">{coins}</span>
             <span className="text-xs font-bold text-zinc-500 tracking-wider">NX\$ COINS</span>
           </div>
+          <button
+            type="button"
+            onClick={handleCashoutRequest}
+            className="mt-5 w-full rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-400/20"
+          >
+            Solicitar Resgate (Cash-out)
+          </button>
         </div>
 
         {/* CARD DO SISTEMA DE RETENÇÃO */}
@@ -317,14 +433,14 @@ function CarteiraContent() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mt-6 grid grid-cols-1 items-stretch gap-4 pb-12 md:grid-cols-3">
           {moedasPackages.map((pkg) => {
             const isLoading = loadingPackageId === pkg.id;
 
             return (
               <div
                 key={pkg.id}
-                className={`relative flex h-full flex-col overflow-hidden rounded-2xl border p-4 shadow-sm transition-all duration-200 ${
+                className={`relative flex h-full flex-col overflow-visible rounded-2xl border p-4 shadow-sm transition-all duration-200 ${
                   pkg.highlight
                     ? "border-amber-400/50 bg-gradient-to-br from-amber-500/10 via-background to-yellow-500/10 shadow-[0_12px_30px_rgba(251,191,36,0.12)]"
                     : "border-border bg-background"
@@ -361,7 +477,7 @@ function CarteiraContent() {
                   <div className="mt-auto">
                     <button
                       type="button"
-                      onClick={() => handleBuyCoinsPackage(pkg.id, pkg.coins)}
+                      onClick={() => handleBuyCoinsPackage(pkg.id)}
                       disabled={isLoading}
                       className={`w-full rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${
                         isLoading
@@ -371,7 +487,7 @@ function CarteiraContent() {
                           : "bg-zinc-950 text-white hover:opacity-90 dark:bg-zinc-50 dark:text-zinc-950"
                       }`}
                     >
-                      {isLoading ? "Aprovando Pix..." : `Comprar ${pkg.name}`}
+                      {isLoading ? "Aprovando Pix..." : "Comprar no Pix"}
                     </button>
                   </div>
                 </div>
@@ -380,6 +496,46 @@ function CarteiraContent() {
           })}
         </div>
       </div>
+
+      {cashoutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Solicitar cash-out">
+          <div className="w-full max-w-sm rounded-2xl border border-amber-500/30 bg-card p-5 shadow-2xl">
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-400">Resgate de saldo</p>
+              <h2 className="mt-2 text-xl font-black text-foreground">Solicitar Cash-out</h2>
+              <p className="mt-1 text-sm text-muted-foreground">A plataforma retém 20% de taxa de mediação.</p>
+            </div>
+            <label htmlFor="cashout-pix" className="text-xs font-semibold text-muted-foreground">Chave Pix</label>
+            <input
+              id="cashout-pix"
+              value={pixKey}
+              onChange={(event) => setPixKey(event.target.value)}
+              placeholder="CPF, e-mail ou chave aleatória"
+              className="mt-2 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => { setCashoutOpen(false); setPixKey(""); }} className="rounded-xl px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted">Cancelar</button>
+              <button type="button" onClick={confirmCashout} className="rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 px-3 py-2 text-xs font-black text-amber-950 hover:brightness-105">Confirmar resgate</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cashoutReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Recibo de cash-out">
+          <div className="w-full max-w-sm rounded-2xl border border-emerald-500/30 bg-card p-5 shadow-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">Transferência simulada</p>
+            <h2 className="mt-2 text-xl font-black text-foreground">Resgate solicitado</h2>
+            <div className="mt-5 space-y-3 rounded-xl border border-border bg-muted/30 p-4 text-sm">
+              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Saldo bruto</span><strong>{cashoutReceipt.grossCoins} NX$</strong></div>
+              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Taxa Nexus (20%)</span><strong className="text-rose-500">- {cashoutReceipt.platformFee} NX$</strong></div>
+              <div className="flex justify-between gap-3 border-t border-border pt-3"><span className="font-semibold text-foreground">Valor líquido</span><strong className="text-emerald-500">{cashoutReceipt.netCoins} NX$ · R$ {cashoutReceipt.netReais.toFixed(2).replace(".", ",")}</strong></div>
+              <div className="border-t border-border pt-3 text-xs text-muted-foreground">Pix: {cashoutReceipt.pixKey}</div>
+            </div>
+            <button type="button" onClick={() => setCashoutReceipt(null)} className="mt-5 w-full rounded-xl bg-foreground px-3 py-2.5 text-xs font-bold text-background hover:opacity-90">Fechar recibo</button>
+          </div>
+        </div>
+      )}
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3 border-b border-border pb-2">

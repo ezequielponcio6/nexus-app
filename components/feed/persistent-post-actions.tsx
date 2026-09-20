@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Coins, Heart, MessageCircle, MoreVertical, Pencil, Save, Trash } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { sanitizeTextInput } from "@/lib/sanitize";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 
 type PersistentPost = {
   id: string;
@@ -232,7 +233,10 @@ export function PersistentPostActions({
           </div>
           {comments.map((comment) => (
             <div key={comment.id} className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
-              <p className="text-[11px] font-bold text-foreground">{comment.authorName}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-bold text-foreground">{comment.authorName}</p>
+                <time className="text-[10px] text-muted-foreground">{formatRelativeTime(comment.created_at)}</time>
+              </div>
               <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{comment.content}</p>
             </div>
           ))}

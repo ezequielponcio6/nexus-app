@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Camera, Calendar, Coins, Heart, MessageCircle } from "lucide-react";
+import { Camera, Calendar, Coins, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PremiumVipBadge } from "@/components/ui/premium-vip-badge";
 import { CreatorSubscribeDialog } from "@/components/profile/creator-subscribe-dialog";
 import { AppShell } from "@/components/layout/app-shell";
 import { useLocalProfileMedia } from "@/components/profile/local-profile-media";
 import { PersistentPostActions } from "@/components/feed/persistent-post-actions";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 
 const premiumCreators: Record<string, { name: string; price: number }> = {
   lunavale: { name: "Luna Vale", price: 180 },
@@ -24,18 +25,18 @@ interface ProfilePost {
   author_id: string;
 }
 
-function ProfilePostMedia({ mediaUrls }: { mediaUrls: string[] }) {
+function ProfilePostMedia({ mediaUrls, onClick }: { mediaUrls: string[]; onClick?: () => void }) {
   const mediaUrl = mediaUrls?.[0];
   if (!mediaUrl) return null;
 
   const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(mediaUrl);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
+    <div onClick={onClick} className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-muted/20 transition-opacity hover:opacity-95">
       {isVideo ? (
-        <video src={mediaUrl} controls preload="metadata" className="max-h-80 w-full object-contain" />
+        <video src={mediaUrl} controls preload="metadata" className="block max-h-[400px] w-full object-cover" />
       ) : (
-        <img src={mediaUrl} alt="Mídia da publicação" className="max-h-80 w-full object-contain" />
+        <img src={mediaUrl} alt="Mídia da publicação" className="block max-h-[400px] w-full object-cover" />
       )}
     </div>
   );
@@ -53,6 +54,7 @@ export default function PerfilPage() {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [profilePosts, setProfilePosts] = useState<ProfilePost[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [expandedPost, setExpandedPost] = useState<ProfilePost | null>(null);
   const { avatarUrl, bannerUrl, selectImage } = useLocalProfileMedia();
   const profileUsername = typeof username === "string" ? username : "usuario";
   const creator = premiumCreators[profileUsername.toLowerCase()] ?? { name: `@${profileUsername}`, price: 120 };
@@ -209,26 +211,72 @@ export default function PerfilPage() {
             Nenhuma publicação feita por este usuário ainda.
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-0">
             {profilePosts.map((post) => (
-              <article key={post.id} className="space-y-3 rounded-2xl border border-border bg-background p-4 shadow-sm">
-                {post.content && <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{post.content}</p>}
-                <ProfilePostMedia mediaUrls={post.media_urls} />
-                <div className="flex items-center justify-between border-t border-border/60 pt-3">
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(post.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
-                  </span>
+              <article key={post.id} className="flex gap-3 border-b border-border/70 bg-background px-1 py-4 first:pt-1">
+                <div className="shrink-0 pt-1">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Avatar do perfil" className="h-10 w-10 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">{profileUsername[0]?.toUpperCase()}</div>
+                  )}
                 </div>
-                <PersistentPostActions
-                  post={post}
-                  onUpdated={(content) => setProfilePosts((current) => current.map((item) => item.id === post.id ? { ...item, content } : item))}
-                  onDeleted={() => setProfilePosts((current) => current.filter((item) => item.id !== post.id))}
-                />
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <span className={`truncate text-sm font-bold ${nameColor}`}>@{profileUsername}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(post.created_at)}</span>
+                  </div>
+                  {post.content && <p className="whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground">{post.content}</p>}
+                  <ProfilePostMedia mediaUrls={post.media_urls} onClick={() => setExpandedPost(post)} />
+                  <PersistentPostActions
+                    post={post}
+                    onUpdated={(content) => setProfilePosts((current) => current.map((item) => item.id === post.id ? { ...item, content } : item))}
+                    onDeleted={() => setProfilePosts((current) => current.filter((item) => item.id !== post.id))}
+                  />
+                </div>
               </article>
             ))}
           </div>
         )}
       </div>
+
+      {expandedPost?.media_urls?.[0] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md" onClick={() => setExpandedPost(null)} role="dialog" aria-modal="true" aria-label="Publicação expandida">
+          <div className="relative flex h-[80vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-background md:flex-row" onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => setExpandedPost(null)} className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/50 p-2 text-white transition-colors hover:bg-black/80" aria-label="Fechar publicação expandida">
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex h-[52%] w-full items-center justify-center bg-zinc-950 p-3 md:h-full md:w-[60%] md:p-6">
+              {expandedPost.media_urls[0].match(/\.(mp4|webm|mov)(\?|$)/i) ? (
+                <video src={expandedPost.media_urls[0]} controls autoPlay className="max-h-full max-w-full object-contain" />
+              ) : (
+                <img src={expandedPost.media_urls[0]} alt="Mídia expandida da publicação" className="max-h-full max-w-full object-contain" />
+              )}
+            </div>
+            <aside className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto border-t border-border bg-background p-5 md:h-full md:w-[40%] md:border-l md:border-t-0">
+              <div className="flex items-center gap-3 border-b border-border pb-4 pr-8">
+                {avatarUrl ? <img src={avatarUrl} alt="Avatar do perfil" className="h-10 w-10 rounded-full object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">{profileUsername[0]?.toUpperCase()}</div>}
+                <div className="min-w-0">
+                  <p className={`truncate text-sm font-bold ${nameColor}`}>@{profileUsername}</p>
+                  <p className="text-xs text-muted-foreground">{formatRelativeTime(expandedPost.created_at)}</p>
+                </div>
+              </div>
+              {expandedPost.content && <p className="whitespace-pre-wrap break-words py-5 text-sm leading-6 text-foreground">{expandedPost.content}</p>}
+              <PersistentPostActions
+                post={expandedPost}
+                onUpdated={(content) => {
+                  setProfilePosts((current) => current.map((item) => item.id === expandedPost.id ? { ...item, content } : item));
+                  setExpandedPost((current) => current ? { ...current, content } : current);
+                }}
+                onDeleted={() => {
+                  setProfilePosts((current) => current.filter((item) => item.id !== expandedPost.id));
+                  setExpandedPost(null);
+                }}
+              />
+            </aside>
+          </div>
+        </div>
+      )}
 
       </div>
     </AppShell>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { Wallet, Coins, Award, Palette, ShoppingBag, Check, Flame, ShieldCheck, Sparkles } from "lucide-react";
+import { Wallet, Coins, Award, Palette, ShoppingBag, Check, Flame, ShieldCheck, Sparkles, Gem } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 
 function CarteiraContent() {
@@ -14,6 +14,7 @@ function CarteiraContent() {
   const [purchasedColors, setPurchasedColors] = useState<string[]>(["text-foreground"]);
   const [activeColor, setActiveColor] = useState("text-foreground");
   const [loadingPackageId, setLoadingPackageId] = useState<string | null>(null);
+  const [activeVipPlan, setActiveVipPlan] = useState<string | null>(null);
 
   useEffect(() => {
     const savedCoins = localStorage.getItem("nexus_coins");
@@ -21,12 +22,14 @@ function CarteiraContent() {
     const savedStreak = localStorage.getItem("nexus_streak");
     const savedPurchased = localStorage.getItem("nexus_purchased_colors");
     const savedActiveColor = localStorage.getItem("nexus_name_color");
+    const savedVipPlan = localStorage.getItem("nexus_vip_plan");
 
     if (savedCoins) setCoins(Number(savedCoins));
     if (savedDaily) setDailyClaimed(savedDaily === "true");
     if (savedStreak) setStreak(Number(savedStreak));
     if (savedPurchased) setPurchasedColors(JSON.parse(savedPurchased));
     if (savedActiveColor) setActiveColor(savedActiveColor);
+    if (savedVipPlan) setActiveVipPlan(savedVipPlan);
   }, []);
 
   // VALORES RECALIBRADOS: Itens raros que exigem esforço real de dias jogando
@@ -64,6 +67,33 @@ function CarteiraContent() {
       highlight: false,
       accent: "from-violet-200 via-fuchsia-300 to-purple-500",
       badge: "Elite",
+    },
+  ];
+
+  const vipPlans = [
+    {
+      id: "bronze-creator",
+      name: "Plano Bronze Creator",
+      price: 200,
+      benefit: "Distintivo Bronze exclusivo",
+      accent: "border-orange-700/40 bg-gradient-to-br from-orange-950/20 to-background",
+      badge: "Bronze",
+    },
+    {
+      id: "prata-influencer",
+      name: "Plano Prata Influencer",
+      price: 500,
+      benefit: "Distintivo Prata + Destaque",
+      accent: "border-slate-400/50 bg-gradient-to-br from-slate-500/10 to-background",
+      badge: "Prata",
+    },
+    {
+      id: "ouro-vip",
+      name: "Plano Ouro VIP",
+      price: 1000,
+      benefit: "Medalha Ouro Lendária + Recursos de Elite",
+      accent: "border-amber-400 bg-gradient-to-br from-amber-500/20 via-yellow-500/5 to-background shadow-[0_14px_40px_rgba(251,191,36,0.18)]",
+      badge: "Ouro VIP",
     },
   ];
 
@@ -134,6 +164,35 @@ function CarteiraContent() {
 
     const packageName = moedasPackages.find((pkg) => pkg.id === packageId)?.name ?? "Pacote";
     alert(`${packageName} carregado com sucesso! +${amount} NX$ adicionados à sua carteira.`);
+  };
+
+  const handleVipSubscription = (planId: string, price: number) => {
+    if (activeVipPlan === planId) {
+      alert("Este plano VIP já está ativo na sua conta.");
+      return;
+    }
+
+    const currentCoins = Number(localStorage.getItem("nexus_coins") ?? coins);
+    const safeCoins = Number.isFinite(currentCoins) && currentCoins >= 0 ? currentCoins : 0;
+    const currentStreak = Number(localStorage.getItem("nexus_streak") ?? streak);
+    const safeStreak = Number.isFinite(currentStreak) ? currentStreak : 0;
+
+    if (safeCoins < price) {
+      alert(`Saldo insuficiente! Este plano custa ${price} NX$. Visite a Carteira para minerar ou comprar mais moedas.`);
+      return;
+    }
+
+    if (safeStreak < 7) {
+      alert("Requisito de Fidelidade não atingido! Assinaturas VIP exigem uma ofensiva ativa de 7 dias.");
+      return;
+    }
+
+    const remainingCoins = safeCoins - price;
+    setCoins(remainingCoins);
+    setActiveVipPlan(planId);
+    localStorage.setItem("nexus_coins", String(remainingCoins));
+    localStorage.setItem("nexus_vip_plan", planId);
+    alert(`Plano ${vipPlans.find((plan) => plan.id === planId)?.name ?? "VIP"} ativado com sucesso!`);
   };
 
   return (
@@ -321,6 +380,51 @@ function CarteiraContent() {
           })}
         </div>
       </div>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
+          <div className="flex items-center gap-2">
+            <Gem className="h-4 w-4 text-amber-400" />
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Planos de Assinatura VIP</h2>
+          </div>
+          {activeVipPlan && <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500">Plano ativo</span>}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {vipPlans.map((plan) => {
+            const isActive = activeVipPlan === plan.id;
+
+            return (
+              <article key={plan.id} className={`relative flex h-full flex-col rounded-2xl border p-5 transition-all duration-200 hover:-translate-y-0.5 ${plan.accent}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="rounded-full border border-current/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-foreground/70">{plan.badge}</span>
+                  <Gem className="h-5 w-5 text-amber-400" />
+                </div>
+                <h3 className="mt-5 text-base font-black text-foreground">{plan.name}</h3>
+                <p className="mt-3 min-h-10 text-sm leading-5 text-muted-foreground">{plan.benefit}</p>
+                <div className="mt-5 flex items-baseline gap-1 border-t border-border/60 pt-4">
+                  <span className="text-2xl font-black text-foreground">{plan.price}</span>
+                  <span className="text-xs font-bold text-amber-500">NX$</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleVipSubscription(plan.id, plan.price)}
+                  disabled={isActive}
+                  className={`mt-5 w-full rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${
+                    isActive
+                      ? "cursor-default border border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
+                      : plan.id === "ouro-vip"
+                      ? "bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 text-amber-950 hover:brightness-105"
+                      : "bg-foreground text-background hover:opacity-90"
+                  }`}
+                >
+                  {isActive ? "Plano ativo" : "Assinar"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
       </div>
     </AppShell>
   );

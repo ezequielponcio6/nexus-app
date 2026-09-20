@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Camera, Calendar, Coins, Flame } from "lucide-react";
+import { Camera, Calendar, Coins, Heart, MessageCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { PremiumVipBadge } from "@/components/ui/premium-vip-badge";
 import { CreatorSubscribeDialog } from "@/components/profile/creator-subscribe-dialog";
 import { AppShell } from "@/components/layout/app-shell";
 import { useLocalProfileMedia } from "@/components/profile/local-profile-media";
+import { PersistentPostActions } from "@/components/feed/persistent-post-actions";
 
 const premiumCreators: Record<string, { name: string; price: number }> = {
   lunavale: { name: "Luna Vale", price: 180 },
@@ -14,7 +16,33 @@ const premiumCreators: Record<string, { name: string; price: number }> = {
   rafaeldiniz: { name: "Rafael Diniz", price: 220 },
 };
 
+interface ProfilePost {
+  id: string;
+  content: string | null;
+  media_urls: string[];
+  created_at: string;
+  author_id: string;
+}
+
+function ProfilePostMedia({ mediaUrls }: { mediaUrls: string[] }) {
+  const mediaUrl = mediaUrls?.[0];
+  if (!mediaUrl) return null;
+
+  const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(mediaUrl);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
+      {isVideo ? (
+        <video src={mediaUrl} controls preload="metadata" className="max-h-80 w-full object-contain" />
+      ) : (
+        <img src={mediaUrl} alt="Mídia da publicação" className="max-h-80 w-full object-contain" />
+      )}
+    </div>
+  );
+}
+
 export default function PerfilPage() {
+  const supabase = createClient();
   const params = useParams();
   const username = params.username;
 
@@ -22,10 +50,32 @@ export default function PerfilPage() {
   const [nameColor, setNameColor] = useState("text-foreground");
   const [userCoins, setUserCoins] = useState(0);
   const [userStreak, setUserStreak] = useState(1);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [profilePosts, setProfilePosts] = useState<ProfilePost[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
   const { avatarUrl, bannerUrl, selectImage } = useLocalProfileMedia();
   const profileUsername = typeof username === "string" ? username : "usuario";
   const creator = premiumCreators[profileUsername.toLowerCase()] ?? { name: `@${profileUsername}`, price: 120 };
   const isPremiumCreator = Boolean(premiumCreators[profileUsername.toLowerCase()]);
+
+  const fetchUserPosts = async (currentUserId: string) => {
+    setLoadingPosts(true);
+
+    try {
+      const { data, error } = await (supabase.from("posts") as any)
+        .select("*")
+        .eq("author_id", currentUserId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setProfilePosts((data as ProfilePost[]) ?? []);
+    } catch (error) {
+      console.error("Erro ao buscar publicações do perfil:", error);
+      setProfilePosts([]);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
 
   // Carrega as customizações da carteira salvas no navegador
   useEffect(() => {
@@ -37,6 +87,35 @@ export default function PerfilPage() {
     if (savedCoins) setUserCoins(Number(savedCoins));
     if (savedStreak) setUserStreak(Number(savedStreak));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProfilePosts = async () => {
+      setLoadingPosts(true);
+      const { data: profile, error } = await (supabase.from("profiles") as any)
+        .select("id")
+        .eq("username", profileUsername)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error || !profile?.id) {
+        setProfileId(null);
+        setProfilePosts([]);
+        setLoadingPosts(false);
+        return;
+      }
+
+      setProfileId(profile.id);
+      await fetchUserPosts(profile.id);
+    };
+
+    void loadProfilePosts();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileUsername]);
 
   // Mapeia a classe css para um nome amigável de exibição da Tag de conquista
   const obterNomeTitulo = (classeCor: string) => {
@@ -66,11 +145,6 @@ export default function PerfilPage() {
           <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
             <span className="rounded-full border border-white/30 bg-black/40 p-2.5 backdrop-blur-sm"><Camera className="h-5 w-5" /></span>
           </span>
-          {/* Tag de Ofensiva no canto do banner */}
-          <div className="absolute top-4 right-4 flex items-center gap-1 bg-black/40 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-white text-xs font-bold">
-            <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-            <span>{userStreak}d Streak</span>
-          </div>
         </label>
 
         {/* Informações do Usuário */}
@@ -128,9 +202,32 @@ export default function PerfilPage() {
       {/* SEÇÃO DAS PUBLICAÇÕES DO USUÁRIO */}
       <div className="space-y-4">
         <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">Publicações</h2>
-        <div className="text-center py-12 bg-zinc-50 dark:bg-zinc-900/30 border border-dashed border-border rounded-xl text-muted-foreground text-sm">
-          Nenhuma publicação feita por este usuário ainda.
-        </div>
+        {loadingPosts ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">Carregando publicações...</div>
+        ) : !profileId || profilePosts.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-zinc-50 py-12 text-center text-sm text-muted-foreground dark:bg-zinc-900/30">
+            Nenhuma publicação feita por este usuário ainda.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {profilePosts.map((post) => (
+              <article key={post.id} className="space-y-3 rounded-2xl border border-border bg-background p-4 shadow-sm">
+                {post.content && <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{post.content}</p>}
+                <ProfilePostMedia mediaUrls={post.media_urls} />
+                <div className="flex items-center justify-between border-t border-border/60 pt-3">
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(post.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                  </span>
+                </div>
+                <PersistentPostActions
+                  post={post}
+                  onUpdated={(content) => setProfilePosts((current) => current.map((item) => item.id === post.id ? { ...item, content } : item))}
+                  onDeleted={() => setProfilePosts((current) => current.filter((item) => item.id !== post.id))}
+                />
+              </article>
+            ))}
+          </div>
+        )}
       </div>
 
       </div>

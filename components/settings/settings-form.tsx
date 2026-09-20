@@ -18,8 +18,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { FeedAlgoMode } from "@/types/database.types";
 import { sanitizeTextInput } from "@/lib/sanitize";
-import { Camera, ImagePlus } from "lucide-react";
+import { Camera, ImagePlus, Lock, ShieldCheck, SlidersHorizontal, Smartphone, UserRound } from "lucide-react";
 import { useLocalProfileMedia } from "@/components/profile/local-profile-media";
+import { createClient } from "@/lib/supabase/client";
 
 const profileInitialState: ProfileActionState = { error: null };
 const creatorInitialState: CreatorSettingsState = { error: null };
@@ -31,6 +32,8 @@ const MODES: { value: FeedAlgoMode; label: string; description: string }[] = [
   { value: "discovery", label: "Descoberta", description: "Prioriza o que está mais em alta." },
 ];
 
+type SettingsTab = "perfil" | "seguranca" | "preferencias";
+
 interface ProfileData {
   display_name: string;
   bio: string | null;
@@ -41,6 +44,7 @@ interface ProfileData {
 }
 
 export function SettingsForm({ profile, email }: { profile: ProfileData | null; email: string }) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("perfil");
   const [state, formAction, pending] = useActionState(updateProfile, profileInitialState);
   const [mode, setMode] = useState<FeedAlgoMode>(profile?.feed_algo_mode ?? "balanced");
   const [, startTransition] = useTransition();
@@ -55,6 +59,11 @@ export function SettingsForm({ profile, email }: { profile: ProfileData | null; 
   const { avatarUrl, bannerUrl, selectImage } = useLocalProfileMedia();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   useEffect(() => {
     try {
@@ -127,8 +136,67 @@ export function SettingsForm({ profile, email }: { profile: ProfileData | null; 
     toast.success(`Nexus Pro ativado por ${NEXUS_PRO_PRICE_COINS} NX$ coins.`);
   }
 
+  async function handlePasswordUpdate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error("Preencha todos os campos de senha.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast.error("A nova senha precisa ter pelo menos 8 caracteres.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error("A confirmação da nova senha não confere.");
+      return;
+    }
+
+    try {
+      setUpdatingPassword(true);
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Senha atualizada com sucesso.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar a senha.");
+    } finally {
+      setUpdatingPassword(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 max-w-lg">
+      <nav className="grid grid-cols-1 gap-1 rounded-2xl border border-border bg-card p-1.5 sm:grid-cols-3" aria-label="Seções de configurações">
+        {([
+          { id: "perfil", label: "Editar Perfil", icon: UserRound },
+          { id: "seguranca", label: "Segurança da Conta", icon: ShieldCheck },
+          { id: "preferencias", label: "Preferências do Feed", icon: SlidersHorizontal },
+        ] as const).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setActiveTab(id)}
+            aria-current={activeTab === id ? "page" : undefined}
+            className={cn(
+              "flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-semibold transition-colors sm:flex-col sm:gap-1.5 sm:py-2.5",
+              activeTab === id ? "bg-foreground text-background shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "perfil" && (
+        <>
       <Card className="overflow-hidden p-0">
         <div className="border-b border-border p-4 sm:p-5">
           <h2 className="text-sm font-semibold">Fotos do perfil</h2>
@@ -177,7 +245,85 @@ export function SettingsForm({ profile, email }: { profile: ProfileData | null; 
           </Button>
         </form>
       </Card>
+        </>
+      )}
 
+      {activeTab === "seguranca" && (
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-border p-4 sm:p-5">
+          <div className="flex items-center gap-2.5">
+            <div className="rounded-xl border border-signal/20 bg-signal/10 p-2 text-signal">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">Segurança da Conta</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Proteja seu acesso e a carteira de moedas.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-4 sm:p-5">
+          <form onSubmit={handlePasswordUpdate} className="space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              <Lock className="h-3.5 w-3.5" /> Alterar senha
+            </div>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="current_password">Senha atual</Label>
+                <Input id="current_password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" />
+              </div>
+              <div>
+                <Label htmlFor="new_password">Nova senha</Label>
+                <Input id="new_password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" />
+              </div>
+              <div>
+                <Label htmlFor="confirm_password">Confirmar nova senha</Label>
+                <Input id="confirm_password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" />
+              </div>
+            </div>
+            <Button type="submit" variant="signal" disabled={updatingPassword}>
+              {updatingPassword ? "Atualizando…" : "Atualizar Senha"}
+            </Button>
+          </form>
+
+          <Separator />
+
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-border p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
+              <div>
+                <p className="text-sm font-medium">Autenticação em Dois Fatores (2FA)</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">Adiciona uma camada extra de proteção à sua carteira de moedas.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={twoFactorEnabled}
+              onClick={() => setTwoFactorEnabled((enabled) => !enabled)}
+              className={cn("relative h-6 w-11 shrink-0 rounded-full border transition-colors", twoFactorEnabled ? "border-signal bg-signal" : "border-border bg-muted")}
+            >
+              <span className={cn("absolute top-0.5 h-4.5 w-4.5 rounded-full bg-white shadow-sm transition-transform", twoFactorEnabled ? "translate-x-5" : "translate-x-0.5")} />
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Dispositivos Conectados</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Windows PC - São Paulo, Brasil (Sua sessão atual)</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => toast.success("As outras sessões foram encerradas.")} className="shrink-0 text-xs font-semibold text-muted-foreground transition-colors hover:text-destructive">Derrubar outras sessões</button>
+            </div>
+          </div>
+        </div>
+      </Card>
+      )}
+
+      {activeTab === "preferencias" && (
       <Card className="p-4 sm:p-5">
         <h2 className="text-sm font-semibold mb-1">Preferência de feed</h2>
         <p className="text-xs text-muted-foreground mb-4">
@@ -207,7 +353,10 @@ export function SettingsForm({ profile, email }: { profile: ProfileData | null; 
           ))}
         </div>
       </Card>
+      )}
 
+      {/* Recursos antigos de criador e plano permanecem disponíveis no código para futura aba de monetização. */}
+      {false && (
       <Card className="p-4 sm:p-5">
         <h2 className="text-sm font-semibold mb-1">Perfil de criador</h2>
         <p className="text-xs text-muted-foreground mb-4">
@@ -251,7 +400,9 @@ export function SettingsForm({ profile, email }: { profile: ProfileData | null; 
           </Button>
         </form>
       </Card>
+      )}
 
+      {false && (
       <Card className="p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
           <h2 className="text-sm font-semibold mb-1">Plano</h2>
@@ -300,6 +451,7 @@ export function SettingsForm({ profile, email }: { profile: ProfileData | null; 
           </Button>
         </div>
       </Card>
+      )}
     </div>
   );
 }

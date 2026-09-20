@@ -22,6 +22,7 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
   const searchParams = useSearchParams();
   const [currentUser, setCurrentUser] = useState(initialUser);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [followedCreators, setFollowedCreators] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const syncAvatar = () => setAvatarUrl(localStorage.getItem("nexus_avatar_url"));
@@ -68,15 +69,19 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
   ];
 
   const SUGGESTED_CREATORS = [
-    { name: "Luna Vale", username: "lunavale", category: "Branding" },
-    { name: "Ari Sato", username: "arisato", category: "Design visual" },
-    { name: "Rafael Diniz", username: "rafaeldiniz", category: "Estratégia" },
+    { name: "Luna Vale", username: "lunavale", category: "Branding", avatar: "https://i.pravatar.cc/96?img=47" },
+    { name: "Ari Sato", username: "arisato", category: "Design visual", avatar: "https://i.pravatar.cc/96?img=32" },
+    { name: "Rafael Diniz", username: "rafaeldiniz", category: "Estratégia", avatar: "https://i.pravatar.cc/96?img=12" },
   ];
 
+  const toggleFollowCreator = (username: string) => {
+    setFollowedCreators((current) => ({ ...current, [username]: !current[username] }));
+  };
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
+    <div className="min-h-screen bg-background text-foreground flex md:h-screen md:overflow-hidden">
       {/* Menu Lateral - Desktop */}
-      <aside className="w-64 border-r border-border hidden md:flex flex-col justify-between p-4 fixed h-screen">
+      <aside className="hidden md:flex fixed top-0 left-0 h-screen overflow-y-auto w-64 border-r border-border flex-col justify-between p-4">
         <div className="space-y-6">
           <Link href="/feed" className="text-xl font-bold px-3 block">
             Nexus
@@ -126,75 +131,75 @@ function AppShellContent({ children, user: initialUser, activePath: providedActi
       </aside>
 
       {/* Área do Conteúdo Principal */}
-      <main className="min-w-0 flex-1 pb-16 md:pl-64 md:pb-0">
-        <div className="mx-auto grid min-h-screen w-full max-w-[1480px] grid-cols-1 gap-8 px-4 py-6 sm:px-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:px-8">
-          <section className="min-w-0">{children}</section>
-
-          <aside className="hidden space-y-5 xl:block" aria-label="Painel de Destaques">
-            <div className="sticky top-6 space-y-5">
-              <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <div className="mb-4 flex items-center gap-2">
-                  <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500">
-                    <TrendingUp className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-foreground">Painel de Destaques</h2>
-                    <p className="text-[11px] text-muted-foreground">O que está movimentando a rede</p>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  {TRENDING_TOPICS.map((topic, index) => (
-                    <button
-                      key={topic.label}
-                      type="button"
-                      className="group flex w-full items-center justify-between gap-3 rounded-xl p-3 text-left transition-colors hover:bg-muted/60"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Em alta · 0{index + 1}</span>
-                        <span className="mt-1 block truncate text-sm font-semibold text-foreground">{topic.label}</span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">{topic.count}</span>
-                      </span>
-                      <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="rounded-lg bg-signal/10 p-2 text-signal">
-                      <Users className="h-4 w-4" />
-                    </div>
-                    <h2 className="text-sm font-bold text-foreground">Criadores sugeridos</h2>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Para você</span>
-                </div>
-
-                <div className="space-y-1">
-                  {SUGGESTED_CREATORS.map((creator) => (
-                    <Link
-                      key={creator.username}
-                      href={`/perfil/${creator.username}`}
-                      className="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-muted/60"
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-900 to-amber-500 text-xs font-black text-white dark:from-zinc-100 dark:to-amber-400 dark:text-zinc-950">
-                        {creator.name.split(" ").map((part) => part[0]).join("")}
-                      </div>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-foreground">{creator.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{creator.category}</span>
-                      </span>
-                      <span className="shrink-0 text-[10px] font-bold text-signal">Ver perfil</span>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            </div>
-          </aside>
+      <main className="min-w-0 flex-1 pb-16 md:h-screen md:overflow-y-auto md:pl-64 md:pb-0 lg:pr-80">
+        <div className="mx-auto min-h-screen w-full max-w-2xl px-4 py-6 sm:px-6">
+          {children}
         </div>
       </main>
+
+      {/* Painel Direito - Desktop */}
+      <aside className="hidden lg:block fixed top-0 right-0 h-screen w-80 border-l border-border bg-background p-4 overflow-y-auto" aria-label="Painel de Amigos e Seguidores">
+        <div className="space-y-6">
+          <section>
+            <div className="mb-4 flex items-center gap-2">
+              <div className="rounded-lg bg-signal/10 p-2 text-signal"><Users className="h-4 w-4" /></div>
+              <div>
+                <h2 className="text-sm font-bold text-foreground">Sugestões de Seguidores</h2>
+                <p className="text-[11px] text-muted-foreground">Pessoas para acompanhar</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              {SUGGESTED_CREATORS.map((creator) => (
+                <div key={creator.username} className="flex items-center gap-2 rounded-xl p-2 transition-colors hover:bg-muted/60">
+                  <Link href={`/perfil/${creator.username}`} className="flex min-w-0 flex-1 items-center gap-3">
+                    <img src={creator.avatar} alt={`Avatar de ${creator.name}`} className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-background" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+                      {creator.name}
+                      <PremiumVipBadge active className="scale-75 origin-left" />
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">{creator.category}</span>
+                  </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => toggleFollowCreator(creator.username)}
+                    className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
+                      followedCreators[creator.username]
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-foreground text-background hover:opacity-90"
+                    }`}
+                  >
+                    {followedCreators[creator.username] ? "Seguindo" : "Seguir"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-4 flex items-center gap-2">
+              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500"><TrendingUp className="h-4 w-4" /></div>
+              <div>
+                <h2 className="text-sm font-bold text-foreground">Assuntos em Alta</h2>
+                <p className="text-[11px] text-muted-foreground">O que movimenta a rede</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              {TRENDING_TOPICS.map((topic, index) => (
+                <button key={topic.label} type="button" className="group flex w-full items-center justify-between gap-3 rounded-xl p-3 text-left transition-colors hover:bg-muted/60">
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Em alta · 0{index + 1}</span>
+                    <span className="mt-1 block truncate text-sm font-semibold text-foreground">{topic.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{topic.count}</span>
+                  </span>
+                  <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      </aside>
 
       {/* Menu Inferior - Mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-md flex items-center justify-around p-2 z-50">
